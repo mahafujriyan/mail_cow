@@ -1,0 +1,31 @@
+{
+  "name": "securityblackrock-webmail-api",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "tsx watch src/index.ts",
+    "build": "tsc -p tsconfig.json",
+    "start": "node dist/index.js",
+    "test": "tsx --test test/**/*.test.ts"
+  },
+  "dependencies": {
+    "express": "^4.21.2",
+    "helmet": "^8.1.0",
+    "imapflow": "^1.0.193",
+    "mailparser": "^3.7.4",
+    "multer": "^1.4.5-lts.2",
+    "nodemailer": "^7.0.5",
+    "sanitize-html": "^2.17.0",
+    "zod": "^3.25.76"
+  },
+  "devDependencies": {
+    "@types/express": "^4.17.23",
+    "@types/mailparser": "^3.4.6",
+    "@types/multer": "^1.4.13",
+    "@types/node": "^24.3.0",
+    "@types/nodemailer": "^6.4.17",
+    "@types/sanitize-html": "^2.16.0",
+    "tsx": "^4.20.3",
+    "typescript": "^5.9.2"
+  }
+}
