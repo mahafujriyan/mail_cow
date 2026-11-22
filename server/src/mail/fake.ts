@@ -1,4 +1,7 @@
 import { simpleParser } from "mailparser";
+
+export const DEMO_EMAIL = "support@securityblackrock.com";
+export const DEMO_PASSWORD = "local-demo-only";
 import { HttpError } from "../errors.js";
 import { encodeMailbox } from "./ids.js";
 import { parsedToRaw } from "./parse.js";
