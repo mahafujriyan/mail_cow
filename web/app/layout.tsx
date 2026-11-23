@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+<<<<<<< HEAD
 import { Outfit } from "next/font/google";
 import { Providers } from "@/components/providers";
 import "./globals.css";
@@ -25,4 +26,15 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
       </body>
     </html>
   );
+=======
+import "./globals.css";
+
+export const metadata: Metadata = {
+  title: "Security Blackrock Mail",
+  description: "Secure, modern webmail for Security Blackrock.",
+};
+
+export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
+  return <html lang="en"><body>{children}</body></html>;
+>>>>>>> 5c00b5ac3a83bac3d4450112924e16bc7192fc80
 }
