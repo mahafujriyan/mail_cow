@@ -1,0 +1,109 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --canvas: 243 244 246;
+  --surface: 255 255 255;
+  --ink: 24 28 27;
+  --muted: 107 114 112;
+  --line: 228 230 232;
+  --brand: 18 60 50;
+  --on-brand: 255 255 255;
+  --accent: 18 60 50;
+  --mint: 236 244 239;
+  --danger: 153 48 48;
+  --star: 176 132 46;
+  color-scheme: light;
+}
+
+.dark {
+  --canvas: 16 19 18;
+  --surface: 23 28 26;
+  --ink: 236 240 238;
+  --muted: 154 163 159;
+  --line: 42 49 46;
+  --brand: 18 60 50;
+  --on-brand: 255 255 255;
+  --accent: 143 196 168;
+  --mint: 28 46 39;
+  --danger: 232 156 156;
+  --star: 214 184 106;
+  color-scheme: dark;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  height: 100%;
+}
+
+body {
+  margin: 0;
+  background: rgb(var(--canvas));
+  color: rgb(var(--ink));
+  font-family: var(--font-outfit), Outfit, sans-serif;
+}
+
+::selection {
+  background: #d5e8de;
+  color: #123c32;
+}
+
+:focus-visible {
+  outline: 2px solid #123c32;
+  outline-offset: 2px;
+}
+
+button,
+input,
+textarea,
+select {
+  font: inherit;
+}
+
+.ProseMirror {
+  min-height: 180px;
+  outline: none;
+}
+
+.ProseMirror p {
+  margin: 0.4em 0;
+}
+
+.ProseMirror ul,
+.ProseMirror ol {
+  margin: 0.4em 0;
+  padding-left: 1.25rem;
+}
+
+.ProseMirror a {
+  color: #123c32;
+  text-decoration: underline;
+}
+
+.ProseMirror p.is-editor-empty:first-child::before {
+  float: left;
+  height: 0;
+  color: #9aa19e;
+  content: attr(data-placeholder);
+  pointer-events: none;
+}
+
+.ProseMirror img {
+  max-width: 100%;
+  height: auto;
+  border-radius: 6px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
+  }
+}

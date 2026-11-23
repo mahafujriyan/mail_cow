@@ -37,7 +37,10 @@ const deps: AppDeps = {
       throw classifyMailError(error);
     }
   },
-  deliver: (auth, raw, recipients) => deliverMessage(config, auth, raw, recipients),
+  deliver: (auth, raw, recipients) => {
+    if (config.mailMode === "fake") return Promise.resolve();
+    return deliverMessage(config, auth, raw, recipients);
+  },
   loginLimiter: new RateLimiter(8, 15 * 60 * 1000),
   apiLimiter: new RateLimiter(300, 60 * 1000),
   uploadLimiter: new RateLimiter(40, 15 * 60 * 1000),
