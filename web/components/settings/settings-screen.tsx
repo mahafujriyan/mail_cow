@@ -351,7 +351,11 @@ export function SettingsScreen() {
 }
 
 function normalize(settings: Settings): Settings {
-  return { ...settings, avatarData: settings.avatarData || "", signatureHtml: settings.signatureHtml || "" };
+  return {
+    ...settings,
+    avatarData: settings.avatarData || "",
+    signatureHtml: settings.signatureHtml || "<p></p>",
+  };
 }
 
 function snapshot(settings: Settings) {
