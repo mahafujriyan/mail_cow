@@ -5,6 +5,11 @@ export function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs));
 }
 
+export function avatarSrc(value?: string) {
+  if (!value || !/^data:image\/(?:png|jpeg|webp|gif);base64,[a-z0-9+/=\s]+$/i.test(value)) return "";
+  return value;
+}
+
 export function initials(name: string, email: string) {
   const source = name.trim() || email;
   const parts = source.split(/\s+/).filter(Boolean);

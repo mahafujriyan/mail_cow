@@ -2,7 +2,7 @@
 
 import { Eye, EyeOff } from "lucide-react";
 import { useRouter } from "next/navigation";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Mark } from "@/components/brand";
 import { ApiError, api } from "@/lib/api";
 import { useI18n } from "@/lib/i18n";
@@ -19,9 +19,11 @@ export function LoginForm() {
   const [error, setError] = useState("");
   const [pending, setPending] = useState(false);
 
-  if (status === "ready") {
-    router.replace("/mail");
-  }
+  useEffect(() => {
+    if (status === "ready") router.replace("/mail");
+  }, [status, router]);
+
+  if (status === "ready") return null;
 
   async function submit(event: React.FormEvent) {
     event.preventDefault();

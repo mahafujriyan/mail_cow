@@ -23,6 +23,8 @@ npm --prefix web run dev
 
 Open `http://127.0.0.1:3100` and sign in as `support@securityblackrock.com` with the password `local-demo-only`.
 
+The API loads environment files from its own location, so the working directory can be the repo or `server` (`npm --prefix server`, or `node dist/index.js`). Variables already set in the process are left as they are. `server/.env` fills anything still unset, then the repo `.env` fills the rest. Both files are gitignored. If `server/.env` is missing locally, create it there with a `SESSION_SECRET` of at least 32 characters and do not commit it.
+
 ## Real mailbox
 
 Copy `.env.example` to `.env`, set a long `SESSION_SECRET`, and keep `MAIL_MODE=imap`. The pinned Mailcow certificate is `certs/mail.securityblackrock.com.pem`. Confirm its fingerprint on the server before relying on it:

@@ -1,5 +1,6 @@
 import fs from "node:fs";
 import path from "node:path";
+import { fileURLToPath } from "node:url";
 
 export type AppConfig = {
   nodeEnv: "development" | "test" | "production";
@@ -65,12 +66,13 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): AppConfig {
   };
 }
 
-export function loadEnvFile(file: string) {
+export function loadEnvFile(file: string, env: NodeJS.ProcessEnv = process.env) {
   if (!fs.existsSync(file)) return;
   const text = fs.readFileSync(file, "utf8");
   for (const line of text.split(/\r?\n/)) {
-    const trimmed = line.trim();
+    let trimmed = line.trim();
     if (!trimmed || trimmed.startsWith("#")) continue;
+    if (trimmed.startsWith("export ")) trimmed = trimmed.slice(7).trim();
     const eq = trimmed.indexOf("=");
     if (eq <= 0) continue;
     const key = trimmed.slice(0, eq).trim();
@@ -81,7 +83,47 @@ export function loadEnvFile(file: string) {
     ) {
       value = value.slice(1, -1);
     }
-    if (process.env[key] === undefined) process.env[key] = value;
+    if (env[key] === undefined) env[key] = value;
+  }
+}
+
+function packageName(dir: string): string | null {
+  const file = path.join(dir, "package.json");
+  if (!fs.existsSync(file)) return null;
+  try {
+    const parsed = JSON.parse(fs.readFileSync(file, "utf8")) as { name?: string };
+    return typeof parsed.name === "string" ? parsed.name : null;
+  } catch {
+    return null;
+  }
+}
+
+// Already-set environment variables win. server/.env is next, then the repo .env
+// fills only keys that are still unset. Paths come from this file so cwd can be
+// the repo or server/, including `npm --prefix server` and `node dist/index.js`.
+export function loadRuntimeEnv(options?: { moduleDir?: string; cwd?: string; env?: NodeJS.ProcessEnv }) {
+  const env = options?.env ?? process.env;
+  const moduleDir = options?.moduleDir ?? path.dirname(fileURLToPath(import.meta.url));
+  const serverDir = path.resolve(moduleDir, "..");
+  const repoDir = path.resolve(serverDir, "..");
+  const cwd = path.resolve(options?.cwd ?? process.cwd());
+  const cwdIsServer = packageName(cwd) === "securityblackrock-webmail-api";
+  const cwdIsRepo = fs.existsSync(path.join(cwd, "server", "package.json"));
+  const files = [
+    path.join(serverDir, ".env"),
+    path.join(cwd, "server", ".env"),
+    cwdIsServer ? path.join(cwd, ".env") : "",
+    path.join(repoDir, ".env"),
+    cwdIsRepo ? path.join(cwd, ".env") : "",
+    cwdIsServer ? path.join(cwd, "..", ".env") : "",
+  ];
+  const seen = new Set<string>();
+  for (const file of files) {
+    if (!file) continue;
+    const resolved = path.resolve(file);
+    if (seen.has(resolved)) continue;
+    seen.add(resolved);
+    loadEnvFile(resolved, env);
   }
 }
 

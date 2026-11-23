@@ -16,7 +16,7 @@ type SessionValue = {
 
 const SessionContext = createContext<SessionValue | null>(null);
 
-function applyTheme(theme: "light" | "dark" | undefined) {
+export function applyTheme(theme: "light" | "dark" | undefined) {
   if (!theme || typeof document === "undefined") return;
   document.documentElement.classList.toggle("dark", theme === "dark");
   localStorage.setItem("sbr-theme", theme);

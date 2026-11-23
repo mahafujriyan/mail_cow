@@ -62,6 +62,7 @@ export type Settings = {
   theme: "light" | "dark";
   notifyDesktop: boolean;
   notifySound: boolean;
+  avatarData: string;
   initialized: boolean;
 };
 

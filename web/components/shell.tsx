@@ -22,7 +22,7 @@ import { useCompose } from "@/lib/compose";
 import { useI18n, type DictionaryKey } from "@/lib/i18n";
 import { useSession } from "@/lib/session";
 import type { Mailbox } from "@/lib/types";
-import { cn, initials } from "@/lib/utils";
+import { avatarSrc, cn, initials } from "@/lib/utils";
 
 const ROLE_ORDER = ["inbox", "drafts", "sent", "junk", "trash", "archive"] as const;
 
@@ -83,7 +83,11 @@ function TopBar({ onMenu }: { onMenu: () => void }) {
   }, [params]);
 
   async function logout() {
-    await api("/api/auth/logout", { method: "POST" });
+    try {
+      await api("/api/auth/logout", { method: "POST" });
+    } catch {
+      return;
+    }
     setUser(null);
     router.replace("/login");
   }
@@ -120,15 +124,29 @@ function TopBar({ onMenu }: { onMenu: () => void }) {
       <DropdownMenu.Root>
         <DropdownMenu.Trigger
           aria-label={t("account")}
-          className="ml-auto grid h-8 w-8 place-items-center rounded-full bg-mint text-xs font-semibold text-brand"
+          className="ml-auto grid h-8 w-8 place-items-center overflow-hidden rounded-full bg-mint text-xs font-semibold text-brand"
         >
-          {initials(user?.settings.displayName || "", user?.email || "S")}
+          {avatarSrc(user?.settings.avatarData) ? (
+            <img src={avatarSrc(user?.settings.avatarData)} alt="" className="h-8 w-8 object-cover" />
+          ) : (
+            initials(user?.settings.displayName || "", user?.email || "S")
+          )}
         </DropdownMenu.Trigger>
         <DropdownMenu.Portal>
           <DropdownMenu.Content align="end" sideOffset={8} className="z-50 w-56 rounded-xl border border-line bg-surface p-1 text-sm shadow-sheet">
             <div className="px-3 py-2 text-xs text-muted">{user?.email}</div>
-            <MenuLink href="/settings">{t("settings")}</MenuLink>
-            <MenuLink href="/contacts">{t("contacts")}</MenuLink>
+            <DropdownMenu.Item
+              className="cursor-pointer rounded-lg px-3 py-2 outline-none data-[highlighted]:bg-canvas"
+              onSelect={() => router.push("/settings")}
+            >
+              {t("settings")}
+            </DropdownMenu.Item>
+            <DropdownMenu.Item
+              className="cursor-pointer rounded-lg px-3 py-2 outline-none data-[highlighted]:bg-canvas"
+              onSelect={() => router.push("/contacts")}
+            >
+              {t("contacts")}
+            </DropdownMenu.Item>
             <DropdownMenu.Item className="cursor-pointer rounded-lg px-3 py-2 outline-none data-[highlighted]:bg-canvas" onSelect={() => void logout()}>
               {t("logOut")}
             </DropdownMenu.Item>
@@ -139,22 +157,15 @@ function TopBar({ onMenu }: { onMenu: () => void }) {
   );
 }
 
-function MenuLink({ href, children }: { href: string; children: React.ReactNode }) {
-  return (
-    <DropdownMenu.Item asChild className="cursor-pointer rounded-lg px-3 py-2 outline-none data-[highlighted]:bg-canvas">
-      <Link href={href}>{children}</Link>
-    </DropdownMenu.Item>
-  );
-}
-
 export function FolderNav({ onNavigate }: { onNavigate?: () => void }) {
   const { t } = useI18n();
   const { openCompose } = useCompose();
+  const { setUser } = useSession();
+  const router = useRouter();
   const pathname = usePathname();
   const [boxes, setBoxes] = useState<Mailbox[]>([]);
   const [creating, setCreating] = useState(false);
   const [name, setName] = useState("");
-  const router = useRouter();
 
   async function load() {
     const data = await api<{ mailboxes: Mailbox[] }>("/api/mailboxes");
@@ -163,7 +174,23 @@ export function FolderNav({ onNavigate }: { onNavigate?: () => void }) {
 
   useEffect(() => {
     void load().catch(() => setBoxes([]));
+    const onRefresh = () => {
+      void load().catch(() => setBoxes([]));
+    };
+    window.addEventListener("sbr-mailboxes", onRefresh);
+    return () => window.removeEventListener("sbr-mailboxes", onRefresh);
   }, [pathname]);
+
+  async function logout() {
+    try {
+      await api("/api/auth/logout", { method: "POST" });
+    } catch {
+      return;
+    }
+    setUser(null);
+    router.replace("/login");
+    onNavigate?.();
+  }
 
   const special = ROLE_ORDER.map((role) => boxes.find((box) => box.role === role)).filter((box): box is Mailbox => Boolean(box));
   const custom = boxes.filter((box) => box.role === "custom");
@@ -220,6 +247,22 @@ export function FolderNav({ onNavigate }: { onNavigate?: () => void }) {
             {t("newFolder")}
           </button>
         )}
+      </div>
+      <div className="border-t border-line px-2 pt-2">
+        <Link
+          href="/settings"
+          onClick={onNavigate}
+          className="flex h-9 items-center rounded-lg px-2.5 text-sm hover:bg-canvas"
+        >
+          {t("settings")}
+        </Link>
+        <button
+          type="button"
+          onClick={() => void logout()}
+          className="flex h-9 w-full items-center rounded-lg px-2.5 text-left text-sm text-muted hover:bg-canvas hover:text-ink"
+        >
+          {t("logOut")}
+        </button>
       </div>
     </nav>
   );

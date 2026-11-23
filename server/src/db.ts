@@ -10,6 +10,7 @@ export type Settings = {
   theme: "light" | "dark";
   notifyDesktop: boolean;
   notifySound: boolean;
+  avatarData: string;
   initialized: boolean;
 };
 
@@ -40,6 +41,7 @@ type SettingsRow = {
   theme: string;
   notify_desktop: number;
   notify_sound: number;
+  avatar_data: string;
   initialized: number;
 };
 
@@ -106,6 +108,7 @@ export class AppDatabase {
         theme TEXT NOT NULL DEFAULT 'light',
         notify_desktop INTEGER NOT NULL DEFAULT 0,
         notify_sound INTEGER NOT NULL DEFAULT 0,
+        avatar_data TEXT NOT NULL DEFAULT '',
         initialized INTEGER NOT NULL DEFAULT 0,
         updated_at INTEGER NOT NULL
       );
@@ -142,6 +145,14 @@ export class AppDatabase {
       );
       CREATE INDEX IF NOT EXISTS uploads_owner ON uploads(owner_email, created_at);
     `);
+    this.ensureColumn("settings", "avatar_data", "TEXT NOT NULL DEFAULT ''");
+  }
+
+  private ensureColumn(table: "settings", column: "avatar_data", definition: string) {
+    const columns = this.db.prepare(`PRAGMA table_info(${table})`).all() as Array<{ name: string }>;
+    if (!columns.some((item) => item.name === column)) {
+      this.db.exec(`ALTER TABLE ${table} ADD COLUMN ${column} ${definition}`);
+    }
   }
 
   createSession(input: {
@@ -203,8 +214,8 @@ export class AppDatabase {
     if (!row) {
       this.db
         .prepare(
-          `INSERT INTO settings (email, display_name, signature_html, language, time_zone, theme, notify_desktop, notify_sound, initialized, updated_at)
-           VALUES (?, '', '', 'en', 'UTC', 'light', 0, 0, 0, ?)`,
+          `INSERT INTO settings (email, display_name, signature_html, language, time_zone, theme, notify_desktop, notify_sound, avatar_data, initialized, updated_at)
+           VALUES (?, '', '', 'en', 'UTC', 'light', 0, 0, '', 0, ?)`,
         )
         .run(email, Date.now());
       return this.getSettings(email);
@@ -217,6 +228,7 @@ export class AppDatabase {
       theme: row.theme === "dark" ? "dark" : "light",
       notifyDesktop: row.notify_desktop === 1,
       notifySound: row.notify_sound === 1,
+      avatarData: row.avatar_data || "",
       initialized: row.initialized === 1,
     };
   }
@@ -224,8 +236,8 @@ export class AppDatabase {
   saveSettings(email: string, settings: Settings) {
     this.db
       .prepare(
-        `INSERT INTO settings (email, display_name, signature_html, language, time_zone, theme, notify_desktop, notify_sound, initialized, updated_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        `INSERT INTO settings (email, display_name, signature_html, language, time_zone, theme, notify_desktop, notify_sound, avatar_data, initialized, updated_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
          ON CONFLICT(email) DO UPDATE SET
            display_name = excluded.display_name,
            signature_html = excluded.signature_html,
@@ -234,6 +246,7 @@ export class AppDatabase {
            theme = excluded.theme,
            notify_desktop = excluded.notify_desktop,
            notify_sound = excluded.notify_sound,
+           avatar_data = excluded.avatar_data,
            initialized = excluded.initialized,
            updated_at = excluded.updated_at`,
       )
@@ -246,6 +259,7 @@ export class AppDatabase {
         settings.theme,
         settings.notifyDesktop ? 1 : 0,
         settings.notifySound ? 1 : 0,
+        settings.avatarData,
         settings.initialized ? 1 : 0,
         Date.now(),
       );

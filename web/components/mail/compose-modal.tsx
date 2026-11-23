@@ -68,13 +68,20 @@ function ComposeSheet({
   const [error, setError] = useState("");
   const [sending, setSending] = useState(false);
   const [dragging, setDragging] = useState(false);
+  const [signatureInBody, setSignatureInBody] = useState(false);
   const dirty = useRef(false);
   const fileRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     let cancelled = false;
     async function load() {
-      if (request.mode !== "new" && request.folderId && request.uid) {
+      if (request.mode === "new") {
+        const fresh = await api<{ html: string }>("/api/compose/new");
+        if (cancelled) return;
+        setSeed(fresh.html);
+        setHtml(fresh.html);
+        setSignatureInBody(true);
+      } else if (request.folderId && request.uid) {
         const template = await api<ReplyTemplate>(
           `/api/mailboxes/${request.folderId}/messages/${request.uid}/reply?mode=${request.mode}`,
         );
@@ -87,6 +94,7 @@ function ComposeSheet({
         setHtml(template.html);
         setForwardParts(template.forwardParts);
         setSource(template.source);
+        setSignatureInBody(true);
       }
       if (!cancelled) setReady(true);
     }
@@ -98,13 +106,17 @@ function ComposeSheet({
     };
   }, [request.mode, request.folderId, request.uid, t]);
 
+  const signature = request.mode === "new" ? user?.settings.signatureHtml?.trim() || "" : "";
+  const outboundHtml =
+    signatureInBody || !signature || html.includes(signature) ? html : `${html}<p></p>${signature}`;
+
   const payload = useMemo(
     () => ({
       to,
       cc,
       bcc,
       subject,
-      html,
+      html: outboundHtml,
       attachmentIds: uploads.map((file) => file.id),
       draftUid,
       inReplyTo: source || undefined,
@@ -113,7 +125,7 @@ function ComposeSheet({
           ? { mailboxId: source.mailboxId, uid: source.uid, partIds: forwardParts.map((part) => part.partId) }
           : undefined,
     }),
-    [to, cc, bcc, subject, html, uploads, draftUid, source, request.mode, forwardParts],
+    [to, cc, bcc, subject, outboundHtml, uploads, draftUid, source, request.mode, forwardParts],
   );
 
   useEffect(() => {
@@ -156,12 +168,9 @@ function ComposeSheet({
     setSending(true);
     setError("");
     try {
-      const signature = user?.settings.signatureHtml?.trim();
-      const withSignature =
-        request.mode === "new" && signature && !html.includes(signature) ? `${html}<p></p>${signature}` : html;
       const result = await api<{ sent: boolean; savedToSent: boolean }>("/api/messages/send", {
         method: "POST",
-        json: { ...payload, html: withSignature },
+        json: payload,
       });
       setStatus(result.savedToSent ? t("sentOk") : t("sentWarn"));
       onSent();
@@ -172,8 +181,6 @@ function ComposeSheet({
       setSending(false);
     }
   }
-
-  const signature = request.mode === "new" ? user?.settings.signatureHtml : "";
 
   return (
     <motion.section
@@ -258,7 +265,7 @@ function ComposeSheet({
             }}
           />
         )}
-        {signature && (
+        {!signatureInBody && signature && (
           <div
             className="border-t border-dashed border-line px-4 py-3 text-sm text-muted"
             dangerouslySetInnerHTML={{ __html: DOMPurify.sanitize(signature) }}

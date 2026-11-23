@@ -126,6 +126,73 @@ describe("api", () => {
       assert.equal(settings.signatureHtml.includes("<script"), false);
       assert.equal(settings.timeZone, "Asia/Dhaka");
       assert.equal(settings.theme, "dark");
+      assert.equal(settings.avatarData, "");
+
+      const png =
+        "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==";
+      const withAvatar = await api(base, auth, "/api/settings", {
+        method: "PUT",
+        body: JSON.stringify({
+          displayName: "Support Desk",
+          signatureHtml: "<p>Support</p>",
+          language: "en",
+          timeZone: "Asia/Dhaka",
+          theme: "dark",
+          notifyDesktop: false,
+          notifySound: true,
+          avatarData: png,
+        }),
+      });
+      assert.equal(withAvatar.avatarData, png);
+
+      const kept = await api(base, auth, "/api/settings", {
+        method: "PUT",
+        body: JSON.stringify({
+          displayName: "Desk Two",
+          signatureHtml: "<p>Support</p>",
+          language: "en",
+          timeZone: "Asia/Dhaka",
+          theme: "dark",
+          notifyDesktop: false,
+          notifySound: true,
+        }),
+      });
+      assert.equal(kept.displayName, "Desk Two");
+      assert.equal(kept.avatarData, png);
+
+      const fetched = await api(base, auth, "/api/settings");
+      assert.equal(fetched.avatarData, png);
+      assert.equal(fetched.displayName, "Desk Two");
+
+      const rejected = await fetch(`${base}/api/settings`, {
+        method: "PUT",
+        headers: { cookie: auth.cookie, "x-csrf-token": auth.token, "content-type": "application/json" },
+        body: JSON.stringify({
+          displayName: "Desk Two",
+          signatureHtml: "<p>Support</p>",
+          language: "en",
+          timeZone: "Asia/Dhaka",
+          theme: "dark",
+          notifyDesktop: false,
+          notifySound: true,
+          avatarData: "data:image/svg+xml;base64,PHN2Zy8+",
+        }),
+      });
+      assert.equal(rejected.status, 400);
+
+      const boxes = await api(base, auth, "/api/mailboxes");
+      await api(base, auth, "/api/messages/send", {
+        method: "POST",
+        body: JSON.stringify({
+          to: [{ name: "Aria", address: "aria.rahman@securityblackrock.com" }],
+          subject: "Named",
+          html: "<p>Hello from the desk.</p>",
+        }),
+      });
+      const sentBox = boxes.mailboxes.find((box: { role: string }) => box.role === "sent");
+      const sentPage = await api(base, auth, `/api/mailboxes/${sentBox.id}/messages`);
+      const named = sentPage.messages.find((item: { subject: string }) => item.subject === "Named");
+      assert.equal(named.from[0].name, "Desk Two");
     });
   });
 

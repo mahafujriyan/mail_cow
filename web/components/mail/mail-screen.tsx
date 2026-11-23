@@ -13,7 +13,7 @@ import {
   Trash2,
 } from "lucide-react";
 import { useRouter } from "next/navigation";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { ComposeModal } from "@/components/mail/compose-modal";
 import { api } from "@/lib/api";
 import { useCompose } from "@/lib/compose";
@@ -38,46 +38,66 @@ export function MailScreen({ folderId, uid, q }: { folderId?: string; uid?: numb
   const [loadingList, setLoadingList] = useState(true);
   const [view, setView] = useState<"html" | "plain">("html");
   const [showRemote, setShowRemote] = useState(false);
+  const [tick, setTick] = useState(0);
+  const listGen = useRef(0);
   const timeZone = user?.settings.timeZone || "UTC";
+  const scope = `${folderId || ""}|${q}`;
+  const [pageScope, setPageScope] = useState(scope);
+  if (pageScope !== scope) {
+    setPageScope(scope);
+    if (offset !== 0) setOffset(0);
+  }
+  const activeOffset = pageScope === scope ? offset : 0;
 
   const folder = boxes.find((box) => box.id === folderId) || boxes.find((box) => box.role === "inbox");
 
-  useEffect(() => {
-    setOffset(0);
-  }, [folderId, q]);
-
-  async function loadBoxes() {
-    const data = await api<{ mailboxes: Mailbox[] }>("/api/mailboxes");
-    setBoxes(data.mailboxes);
-    if (!folderId) {
-      const inbox = data.mailboxes.find((box) => box.role === "inbox");
-      if (inbox) router.replace(q ? `/mail/${inbox.id}?q=${encodeURIComponent(q)}` : `/mail/${inbox.id}`);
-    }
+  function reload() {
+    setTick((value) => value + 1);
+    window.dispatchEvent(new Event("sbr-mailboxes"));
   }
 
-  async function loadList(current = folder) {
-    if (!current) return;
+  useEffect(() => {
+    let cancelled = false;
+    void api<{ mailboxes: Mailbox[] }>("/api/mailboxes")
+      .then((data) => {
+        if (cancelled) return;
+        setBoxes(data.mailboxes);
+        if (!folderId) {
+          const inbox = data.mailboxes.find((box) => box.role === "inbox");
+          if (inbox) router.replace(q ? `/mail/${inbox.id}?q=${encodeURIComponent(q)}` : `/mail/${inbox.id}`);
+        }
+      })
+      .catch((caught) => {
+        if (!cancelled) setError(caught instanceof Error ? caught.message : t("couldNotLoad"));
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [folderId, q, router, t, tick]);
+
+  useEffect(() => {
+    if (!folder || pageScope !== scope) return;
+    const gen = ++listGen.current;
+    const mailboxId = folder.id;
     setLoadingList(true);
     setError("");
-    try {
-      const data = await api<MessagePage>(
-        `/api/mailboxes/${current.id}/messages?offset=${offset}&limit=${PAGE}&q=${encodeURIComponent(q)}`,
-      );
-      setPage(data);
-    } catch (caught) {
-      setError(caught instanceof Error ? caught.message : t("couldNotLoad"));
-    } finally {
-      setLoadingList(false);
-    }
-  }
-
-  useEffect(() => {
-    void loadBoxes().catch((caught) => setError(caught instanceof Error ? caught.message : t("couldNotLoad")));
-  }, []);
-
-  useEffect(() => {
-    if (folder) void loadList(folder);
-  }, [folder?.id, offset, q]);
+    void api<MessagePage>(`/api/mailboxes/${mailboxId}/messages?offset=${activeOffset}&limit=${PAGE}&q=${encodeURIComponent(q)}`)
+      .then((data) => {
+        if (gen !== listGen.current) return;
+        if (data.messages.length === 0 && activeOffset > 0) {
+          setOffset(0);
+          return;
+        }
+        setPage(data);
+      })
+      .catch((caught) => {
+        if (gen !== listGen.current) return;
+        setError(caught instanceof Error ? caught.message : t("couldNotLoad"));
+      })
+      .finally(() => {
+        if (gen === listGen.current) setLoadingList(false);
+      });
+  }, [folder?.id, activeOffset, q, tick, pageScope, scope, t]);
 
   useEffect(() => {
     setShowRemote(false);
@@ -106,7 +126,7 @@ export function MailScreen({ folderId, uid, q }: { folderId?: string; uid?: numb
     return () => {
       cancelled = true;
     };
-  }, [folder?.id, uid, showRemote]);
+  }, [folder?.id, uid, showRemote, tick]);
 
   function openMessage(next: number) {
     if (!folder) return;
@@ -124,33 +144,55 @@ export function MailScreen({ folderId, uid, q }: { folderId?: string; uid?: numb
         : current,
     );
     if (message?.uid === item.uid) setMessage({ ...message, flagged });
-    await api(`/api/mailboxes/${folder.id}/flags`, { method: "POST", json: { uids: [item.uid], flagged } });
+    try {
+      await api(`/api/mailboxes/${folder.id}/flags`, { method: "POST", json: { uids: [item.uid], flagged } });
+    } catch (caught) {
+      setPage((current) =>
+        current
+          ? { ...current, messages: current.messages.map((entry) => (entry.uid === item.uid ? { ...entry, flagged: item.flagged } : entry)) }
+          : current,
+      );
+      if (message?.uid === item.uid) setMessage({ ...message, flagged: item.flagged });
+      setError(caught instanceof Error ? caught.message : t("actionFailed"));
+    }
   }
 
   async function moveTo(role: Mailbox["role"]) {
     if (!folder || !message) return;
     const destination = boxes.find((box) => box.role === role);
     if (!destination) return;
-    await api(`/api/mailboxes/${folder.id}/move`, {
-      method: "POST",
-      json: { uids: [message.uid], destinationId: destination.id },
-    });
-    router.push(`/mail/${folder.id}`);
-    void loadList();
+    try {
+      await api(`/api/mailboxes/${folder.id}/move`, {
+        method: "POST",
+        json: { uids: [message.uid], destinationId: destination.id },
+      });
+      router.push(`/mail/${folder.id}`);
+      reload();
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : t("actionFailed"));
+    }
   }
 
   async function removeMessage() {
     if (!folder || !message) return;
-    await api(`/api/mailboxes/${folder.id}/delete`, { method: "POST", json: { uids: [message.uid] } });
-    router.push(`/mail/${folder.id}`);
-    void loadList();
+    try {
+      await api(`/api/mailboxes/${folder.id}/delete`, { method: "POST", json: { uids: [message.uid] } });
+      router.push(`/mail/${folder.id}`);
+      reload();
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : t("actionFailed"));
+    }
   }
 
   async function markUnread() {
     if (!folder || !message) return;
-    await api(`/api/mailboxes/${folder.id}/flags`, { method: "POST", json: { uids: [message.uid], seen: false } });
-    router.push(`/mail/${folder.id}`);
-    void loadList();
+    try {
+      await api(`/api/mailboxes/${folder.id}/flags`, { method: "POST", json: { uids: [message.uid], seen: false } });
+      router.push(`/mail/${folder.id}`);
+      reload();
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : t("actionFailed"));
+    }
   }
 
   const messages = page?.messages || [];
@@ -160,27 +202,45 @@ export function MailScreen({ folderId, uid, q }: { folderId?: string; uid?: numb
   return (
     <div className="flex h-full min-h-0">
       <section className={cn("flex w-full min-w-0 flex-col border-r border-line bg-surface lg:w-[380px] lg:shrink-0", uid && "hidden lg:flex")}>
-        <header className="flex h-12 items-center justify-between px-4">
+        <header className="flex h-12 items-center justify-between gap-3 px-4">
           <h1 className="text-sm font-semibold">{folder ? labelFor(folder, t) : t("inbox")}</h1>
-          {folder && (folder.role === "trash" || folder.role === "junk") && (
-            <button
-              type="button"
-              className="text-xs text-muted hover:text-ink"
-              onClick={() => void api(`/api/mailboxes/${folder.id}/empty`, { method: "POST" }).then(() => loadList())}
-            >
-              {folder.role === "trash" ? t("emptyTrash") : t("emptySpam")}
+          <div className="flex items-center gap-3">
+            <button type="button" className="text-xs text-muted hover:text-ink" onClick={() => reload()}>
+              {t("refresh")}
             </button>
-          )}
-          {folder && folder.role !== "trash" && folder.role !== "junk" && (
-            <button
-              type="button"
-              className="text-xs text-muted hover:text-ink"
-              onClick={() => void api(`/api/mailboxes/${folder.id}/read`, { method: "POST" }).then(() => loadList())}
-            >
-              {t("markAllRead")}
-            </button>
-          )}
+            {folder && (folder.role === "trash" || folder.role === "junk") && (
+              <button
+                type="button"
+                className="text-xs text-muted hover:text-ink"
+                onClick={() =>
+                  void api(`/api/mailboxes/${folder.id}/empty`, { method: "POST" })
+                    .then(() => reload())
+                    .catch((caught) => setError(caught instanceof Error ? caught.message : t("actionFailed")))
+                }
+              >
+                {folder.role === "trash" ? t("emptyTrash") : t("emptySpam")}
+              </button>
+            )}
+            {folder && folder.role !== "trash" && folder.role !== "junk" && (
+              <button
+                type="button"
+                className="text-xs text-muted hover:text-ink"
+                onClick={() =>
+                  void api(`/api/mailboxes/${folder.id}/read`, { method: "POST" })
+                    .then(() => reload())
+                    .catch((caught) => setError(caught instanceof Error ? caught.message : t("actionFailed")))
+                }
+              >
+                {t("markAllRead")}
+              </button>
+            )}
+          </div>
         </header>
+        {error && page && (
+          <p className="px-4 pb-2 text-sm text-danger" role="alert">
+            {error}
+          </p>
+        )}
         <div className="min-h-0 flex-1 overflow-y-auto">
           {loadingList && !page && <ListSkeleton />}
           {error && !page && (
@@ -201,48 +261,39 @@ export function MailScreen({ folderId, uid, q }: { folderId?: string; uid?: numb
               return (
                 <li key={item.uid}>
                   {group !== previous && <p className="px-4 pb-1 pt-3 text-[11px] font-medium uppercase tracking-[0.08em] text-muted">{group}</p>}
-                  <button
-                    type="button"
-                    onClick={() => openMessage(item.uid)}
-                    className={cn(
-                      "flex w-full gap-3 border-b border-line px-4 py-3 text-left",
-                      uid === item.uid ? "bg-mint" : "hover:bg-canvas",
-                    )}
-                  >
-                    <span
-                      className="mt-0.5 grid h-8 w-8 shrink-0 place-items-center rounded-full text-xs font-semibold text-brand"
-                      style={{ background: toneFor(item.from[0]?.address || item.subject) }}
-                    >
-                      {initials(personLabel(item.from[0]), item.from[0]?.address || "?")}
-                    </span>
-                    <span className="min-w-0 flex-1">
-                      <span className="flex items-baseline gap-2">
-                        <span className={cn("min-w-0 flex-1 truncate text-sm", !item.seen && "font-semibold")}>
-                          {personLabel(item.from[0]) || t("you")}
+                  <div className={cn("flex w-full gap-1 border-b border-line pr-2", uid === item.uid ? "bg-mint" : "hover:bg-canvas")}>
+                    <button type="button" onClick={() => openMessage(item.uid)} className="flex min-w-0 flex-1 gap-3 px-4 py-3 text-left">
+                      <span
+                        className="mt-0.5 grid h-8 w-8 shrink-0 place-items-center rounded-full text-xs font-semibold text-brand"
+                        style={{ background: toneFor(item.from[0]?.address || item.subject) }}
+                      >
+                        {initials(personLabel(item.from[0]), item.from[0]?.address || "?")}
+                      </span>
+                      <span className="min-w-0 flex-1">
+                        <span className="flex items-baseline gap-2">
+                          <span className={cn("min-w-0 flex-1 truncate text-sm", !item.seen && "font-semibold")}>
+                            {personLabel(item.from[0]) || t("you")}
+                          </span>
+                          <span className="shrink-0 text-xs tabular-nums text-muted">{formatWhen(item.date, timeZone, language)}</span>
                         </span>
-                        <span className="shrink-0 text-xs tabular-nums text-muted">{formatWhen(item.date, timeZone, language)}</span>
+                        <span className={cn("mt-0.5 block truncate text-sm", !item.seen ? "text-ink" : "text-ink/80")}>
+                          {item.subject || t("subject")}
+                        </span>
+                        <span className="mt-0.5 flex items-center gap-1 text-xs text-muted">
+                          <span className="truncate">{item.preview}</span>
+                          {item.hasAttachments && <Paperclip className="h-3 w-3 shrink-0" />}
+                        </span>
                       </span>
-                      <span className={cn("mt-0.5 block truncate text-sm", !item.seen ? "text-ink" : "text-ink/80")}>
-                        {item.subject || t("subject")}
-                      </span>
-                      <span className="mt-0.5 flex items-center gap-1 text-xs text-muted">
-                        <span className="truncate">{item.preview}</span>
-                        {item.hasAttachments && <Paperclip className="h-3 w-3 shrink-0" />}
-                      </span>
-                    </span>
-                    <span
-                      role="button"
-                      tabIndex={0}
+                    </button>
+                    <button
+                      type="button"
                       aria-label={item.flagged ? t("unstar") : t("star")}
-                      onClick={(event) => void toggleStar(item, event)}
-                      onKeyDown={(event) => {
-                        if (event.key === "Enter") void toggleStar(item);
-                      }}
-                      className="mt-0.5 text-muted"
+                      onClick={() => void toggleStar(item)}
+                      className="mt-3 h-8 w-8 shrink-0 text-muted"
                     >
-                      <Star className={cn("h-4 w-4", item.flagged && "fill-star text-star")} />
-                    </span>
-                  </button>
+                      <Star className={cn("mx-auto h-4 w-4", item.flagged && "fill-star text-star")} />
+                    </button>
+                  </div>
                 </li>
               );
             })}
@@ -365,7 +416,7 @@ export function MailScreen({ folderId, uid, q }: { folderId?: string; uid?: numb
           </article>
         )}
       </section>
-      <ComposeModal onSent={() => void loadList()} />
+      <ComposeModal onSent={() => reload()} />
     </div>
   );
 }

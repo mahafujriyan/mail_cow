@@ -1,6 +1,6 @@
 import path from "node:path";
 import { createApp } from "./app.js";
-import { loadConfig, loadEnvFile } from "./config.js";
+import { loadConfig, loadRuntimeEnv } from "./config.js";
 import { AppDatabase } from "./db.js";
 import type { AppDeps } from "./deps.js";
 import { HttpError } from "./errors.js";
@@ -13,8 +13,7 @@ import { RateLimiter } from "./rate-limit.js";
 import { SessionStore } from "./session.js";
 import { purgeExpiredUploads } from "./storage.js";
 
-loadEnvFile(path.resolve(".env"));
-loadEnvFile(path.resolve("..", ".env"));
+loadRuntimeEnv();
 
 const config = loadConfig();
 const db = new AppDatabase(path.join(config.dataDir, "webmail.db"));

@@ -398,10 +398,16 @@ export function mountRoutes(app: Express, deps: AppDeps) {
     asyncHandler(async (req, res) => {
       const session = requireSession(req);
       const input = settingsSchema.parse(req.body);
+      const current = deps.db.getSettings(session.email);
       const settings = {
-        ...input,
         displayName: cleanHeaderText(input.displayName, 120),
         signatureHtml: sanitizeEmailHtml(input.signatureHtml),
+        language: input.language,
+        timeZone: input.timeZone,
+        theme: input.theme,
+        notifyDesktop: input.notifyDesktop,
+        notifySound: input.notifySound,
+        avatarData: input.avatarData === undefined ? current.avatarData : input.avatarData,
         initialized: true,
       };
       deps.db.saveSettings(session.email, settings);
